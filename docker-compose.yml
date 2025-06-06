@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:15
+    container_name: trd-01-postgres
+    environment:
+      POSTGRES_DB: trd_db
+      POSTGRES_USER: trd_user
+      POSTGRES_PASSWORD: strongpassword123
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db-init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+
+  app:
+    build: .
+    container_name: trd-01-backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    env_file:
+      - .env
+
+volumes:
+  pgdata:

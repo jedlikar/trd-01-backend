@@ -1,0 +1,16 @@
+[Unit]
+Description=trd-01 backend service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/trd-01-backend
+ExecStart=/opt/trd-01-backend/trd-01-backend
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=/opt/trd-01-backend/.env
+
+[Install]
+WantedBy=multi-user.target

@@ -98,13 +98,13 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
+	apiKey = os.Getenv("API_KEY")
 	port := os.Getenv("PORT")
-	apiKey := os.Getenv("API_KEY")
 	dbURL := os.Getenv("DATABASE_URL")
 
+	log.Println("API Key: ", apiKey)
 	log.Println("Running on port: ", port)
 	log.Println("Using database URL: ", dbURL)
-	log.Println("API Key: ", apiKey)
 	db, err = sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Println("Database connection error: ", err)

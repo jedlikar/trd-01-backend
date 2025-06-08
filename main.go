@@ -30,6 +30,8 @@ func apiKeyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("X-API-Key")
 		if key != apiKey {
+			log.Println("Wrong API key: ", key)
+			log.Println("Current API key: ", apiKey)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}

@@ -24,6 +24,10 @@ type Signal struct {
 	IPAddress string    `json:"ip_address"`
 	CreatedAt time.Time `json:"created_at"`
 }
+type HealthStatus struct {
+	App string `json:"app"`
+	DB  string `json:"db"`
+}
 
 // Middleware to check API key
 func apiKeyMiddleware(next http.Handler) http.Handler {
@@ -72,7 +76,7 @@ func postSignalHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getSignalHandler(w http.ResponseWriter, r *http.Request) {
-	row := db.QueryRow(`SELECT data, ip_address, created_at FROM Signal ORDER BY created_at DESC LIMIT 1`)
+	row := db.QueryRow(`SELECT data, ip_address, created_at FROM signal ORDER BY created_at DESC LIMIT 1`)
 
 	var signal Signal
 	err := row.Scan(&signal.Data, &signal.IPAddress, &signal.CreatedAt)
@@ -88,6 +92,24 @@ func getSignalHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(signal)
+}
+
+func getHealthHandler(w http.ResponseWriter, r *http.Request) {
+
+	status := HealthStatus{
+		App: "ok",
+		DB:  "ok",
+	}
+
+	if err := db.Ping(); err != nil {
+		status.DB = "unreachable"
+		w.WriteHeader(http.StatusServiceUnavailable)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
 }
 
 func main() {
@@ -117,6 +139,7 @@ func main() {
 	secure.Use(apiKeyMiddleware)
 	secure.HandleFunc("/signal", postSignalHandler).Methods("POST")
 	secure.HandleFunc("/signal", getSignalHandler).Methods("GET")
+	secure.HandleFunc("/health", getHealthHandler).Methods("GET")
 
 	fmt.Println("Server running on :" + port)
 	log.Fatal(http.ListenAndServe(":"+port, r))

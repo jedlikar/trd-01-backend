@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
 var db *sql.DB
-
-const apiKey = "your-secret-api-key" // TODO: Change this to something secret
+var apiKey string
 
 type Signal struct {
 	Data      string    `json:"data"`
@@ -52,6 +52,7 @@ func postSignalHandler(w http.ResponseWriter, r *http.Request) {
 		Data string `json:"data"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		log.Println("Invalid JSON: ", err)
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
@@ -60,6 +61,7 @@ func postSignalHandler(w http.ResponseWriter, r *http.Request) {
 
 	_, err := db.Exec(`INSERT INTO signal (data, ip_address) VALUES ($1, $2)`, payload.Data, ip)
 	if err != nil {
+		log.Println("Database error: ", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
@@ -73,9 +75,11 @@ func getSignalHandler(w http.ResponseWriter, r *http.Request) {
 	var signal Signal
 	err := row.Scan(&signal.Data, &signal.IPAddress, &signal.CreatedAt)
 	if err == sql.ErrNoRows {
+		log.Println("No signal found: ", err)
 		http.Error(w, "No signal found", http.StatusNotFound)
 		return
 	} else if err != nil {
+		log.Println("Database error: ", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
@@ -86,9 +90,23 @@ func getSignalHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	var err error
-	db, err = sql.Open("postgres", "postgres://trd_user:strongpassword123@db:5432/trd_db?sslmode=disable")
+	err = godotenv.Load()
 	if err != nil {
-		log.Fatal(err)
+		log.Println("Error loading .env file: ", err)
+		log.Fatal("Error loading .env file")
+	}
+
+	port := os.Getenv("PORT")
+	apiKey := os.Getenv("API_KEY")
+	dbURL := os.Getenv("DATABASE_URL")
+
+	log.Println("Running on port: ", port)
+	log.Println("Using database URL: ", dbURL)
+	log.Println("API Key: ", apiKey)
+	db, err = sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Println("Database connection error: ", err)
+		log.Fatal("Database connection error: ", err)
 	}
 	defer db.Close()
 
@@ -97,11 +115,6 @@ func main() {
 	secure.Use(apiKeyMiddleware)
 	secure.HandleFunc("/signal", postSignalHandler).Methods("POST")
 	secure.HandleFunc("/signal", getSignalHandler).Methods("GET")
-
-	port := "8080"
-	if p := os.Getenv("PORT"); p != "" {
-		port = p
-	}
 
 	fmt.Println("Server running on :" + port)
 	log.Fatal(http.ListenAndServe(":"+port, r))

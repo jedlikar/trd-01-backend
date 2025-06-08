@@ -1,6 +1,9 @@
--- CREATE DATABASE trd_db;
--- CREATE USER trd_user WITH ENCRYPTED PASSWORD 'strongpassword123';
-GRANT ALL PRIVILEGES ON DATABASE trd_db TO trd_user;
+CREATE DATABASE {db-name};
+CREATE USER {db-user} WITH ENCRYPTED PASSWORD {db-password};
+GRANT ALL PRIVILEGES ON DATABASE {db-name} TO {db-user};
+GRANT CREATE ON SCHEMA public TO {db-user};
+GRANT USAGE ON SCHEMA public TO {db-user};
+ALTER SCHEMA public OWNER TO {db-user};
 
 CREATE TABLE signal (
                         id SERIAL PRIMARY KEY,

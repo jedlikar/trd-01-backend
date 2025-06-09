@@ -1,0 +1,50 @@
+server {
+    listen 443 ssl; # managed by Certbot
+    server_name trd-01.cz;  # or your VPS IP address
+
+    ssl_certificate /etc/letsencrypt/live/trd-01.cz/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/trd-01.cz/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+
+    # Log files (optional)
+    access_log /var/log/nginx/yourapp_access.log;
+    error_log  /var/log/nginx/yourapp_error.log;
+
+    # Optional: return a 404 if user accesses root
+    location = / {
+        return 404;
+    }
+
+    # Proxy requests to your Go app
+    location /api/ {
+        proxy_pass         http://localhost:8080/api/;
+        proxy_http_version 1.1;
+
+        # Required headers to forward client info properly
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+
+        # Optional: timeout settings
+        proxy_connect_timeout       60;
+        proxy_send_timeout          60;
+        proxy_read_timeout          60;
+        send_timeout                60;
+    }
+}
+
+server {
+    if ($host = trd-01.cz) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    listen 80;
+    server_name trd-01.cz;
+    return 404; # managed by Certbot
+}

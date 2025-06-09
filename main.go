@@ -137,9 +137,9 @@ func main() {
 	r := mux.NewRouter()
 	secure := r.PathPrefix("/").Subrouter()
 	secure.Use(apiKeyMiddleware)
-	secure.HandleFunc("/signal", postSignalHandler).Methods("POST")
-	secure.HandleFunc("/signal", getSignalHandler).Methods("GET")
-	secure.HandleFunc("/health", getHealthHandler).Methods("GET")
+	secure.HandleFunc("/api/signal", postSignalHandler).Methods("POST")
+	secure.HandleFunc("/api/signal", getSignalHandler).Methods("GET")
+	secure.HandleFunc("/api/health", getHealthHandler).Methods("GET")
 
 	fmt.Println("Server running on :" + port)
 	log.Fatal(http.ListenAndServe(":"+port, r))

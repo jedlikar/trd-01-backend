@@ -21,7 +21,7 @@ server {
 
     # Proxy requests to your Go app
     location /api/ {
-        proxy_pass         http://localhost:8080/;
+        proxy_pass         http://localhost:8080/api/;
         proxy_http_version 1.1;
 
         # Required headers to forward client info properly

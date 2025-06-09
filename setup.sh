@@ -24,7 +24,7 @@ export PATH=$PATH:/usr/local/go/bin (add to ~/.bashrc, ~/.profile )
 scp your_file.py yourname@your.server.ip.address:/home/yourname/
 
 
-
+# HTTP enabling through domain name
 # Install Nginx
 sudo apt update
 sudo apt install nginx
@@ -39,3 +39,10 @@ sudo ln -s /etc/nginx/sites-available/myapp /etc/nginx/sites-enabled/
 sudo nginx -t
 # If all good, reload
 sudo systemctl reload nginx
+
+# HTTPS enabling
+# Install Certbot + Nginx plugin
+sudo apt install certbot -y
+sudo apt install python3-certbot-nginx -y
+# Get SSL Certificate via Certbot
+sudo certbot --nginx -d trd-01.cz

@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -114,6 +115,51 @@ func getHealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(status)
 }
+
+// SaveUploadedFile stores the uploaded file in a dated folder and handles name collisions.
+func SaveUploadedFile(file io.Reader, originalFilename string) (string, error) {
+	// Create directory with today's date
+	dateFolder := time.Now().Format("2006-01-02")
+	baseDir := "/var/lib/signalapp/uploads"
+	fullDir := filepath.Join(baseDir, dateFolder)
+
+	err := os.MkdirAll(fullDir, os.ModePerm)
+	if err != nil {
+		return "", fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	// Handle filename collisions
+	filename := originalFilename
+	targetPath := filepath.Join(fullDir, filename)
+	ext := filepath.Ext(filename)
+	name := strings.TrimSuffix(filename, ext)
+	counter := 1
+
+	for {
+		if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+			break // File doesn't exist, we can use this name
+		}
+		// File exists, try with increment
+		filename = fmt.Sprintf("%s_%d%s", name, counter, ext)
+		targetPath = filepath.Join(fullDir, filename)
+		counter++
+	}
+
+	// Save the file
+	outFile, err := os.Create(targetPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create file: %w", err)
+	}
+	defer outFile.Close()
+
+	_, err = io.Copy(outFile, file)
+	if err != nil {
+		return "", fmt.Errorf("failed to save file: %w", err)
+	}
+
+	return targetPath, nil
+}
+
 func postSignalFileHandler(w http.ResponseWriter, r *http.Request) {
 	//if r.Method != http.MethodPost {
 	//	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -127,6 +173,16 @@ func postSignalFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
+
+	// Save file to disk
+	savedPath, err := SaveUploadedFile(file, header.Filename)
+	if err != nil {
+		log.Println("Failed to save uploaded file: ", err)
+		http.Error(w, "Failed to save uploaded file", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprintf(w, "File saved as: %s\n", savedPath)
 
 	ip := getClientIP(r)
 

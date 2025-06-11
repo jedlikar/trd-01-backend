@@ -121,7 +121,7 @@ func getHealthHandler(w http.ResponseWriter, r *http.Request) {
 func SaveUploadedFile(fileBytes []byte, originalFilename string) (string, error) {
 	// Create directory with today's date
 	dateFolder := time.Now().Format("2006-01-02")
-	baseDir := "/var/lib/signalapp/uploads"
+	baseDir := "/var/lib/trd-01/uploads"
 	fullDir := filepath.Join(baseDir, dateFolder)
 
 	err := os.MkdirAll(fullDir, os.ModePerm)

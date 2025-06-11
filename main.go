@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
@@ -117,7 +118,7 @@ func getHealthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // SaveUploadedFile stores the uploaded file in a dated folder and handles name collisions.
-func SaveUploadedFile(file io.Reader, originalFilename string) (string, error) {
+func SaveUploadedFile(fileBytes []byte, originalFilename string) (string, error) {
 	// Create directory with today's date
 	dateFolder := time.Now().Format("2006-01-02")
 	baseDir := "/var/lib/signalapp/uploads"
@@ -152,7 +153,7 @@ func SaveUploadedFile(file io.Reader, originalFilename string) (string, error) {
 	}
 	defer outFile.Close()
 
-	_, err = io.Copy(outFile, file)
+	_, err = io.Copy(outFile, bytes.NewReader(fileBytes))
 	if err != nil {
 		return "", fmt.Errorf("failed to save file: %w", err)
 	}
@@ -170,10 +171,6 @@ func indexOf(slice []string, target string) int {
 }
 
 func postSignalFileHandler(w http.ResponseWriter, r *http.Request) {
-	//if r.Method != http.MethodPost {
-	//	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	//	return
-	//}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
@@ -183,8 +180,15 @@ func postSignalFileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	// Read the entire file into memory
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		http.Error(w, "Failed to read uploaded file", http.StatusInternalServerError)
+		return
+	}
+
 	// Save file to disk
-	savedPath, err := SaveUploadedFile(file, header.Filename)
+	savedPath, err := SaveUploadedFile(fileBytes, header.Filename)
 	if err != nil {
 		log.Println("Failed to save uploaded file: ", err)
 		http.Error(w, "Failed to save uploaded file", http.StatusInternalServerError)
@@ -214,84 +218,100 @@ func postSignalFileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to insert upload info", http.StatusInternalServerError)
 		return
 	}
-	log.Println("file: ", file)
 
-	reader := csv.NewReader(file)
+	//tx.Commit()
+
+	reader := csv.NewReader(bytes.NewReader(fileBytes))
 	reader.TrimLeadingSpace = true
-	log.Println("reader: ", reader)
-	_, err = reader.Read() // skip header
+	csvHeader, err := reader.Read()
 	if err != nil {
 		log.Println("Failed to read header: ", err)
 		http.Error(w, "Failed to read header", http.StatusBadRequest)
 		return
 	}
 
-	//// Prepare list of columns that exist in the DB
-	//allowedCols := map[string]bool{
-	//	"symbol": true, "action": true, "quantity": true,
-	//	"sectype": true, "exchange": true, "timeinforce": true,
-	//	"ordertype": true, "lmtprice": true, "orderid": true,
-	//	"baskettag": true, "orderref": true, "account": true,
-	//	"auxprice": true, "parentorderid": true,
-	//}
-	//
-	//// Filter valid columns from header
-	//var cols []string
-	//for _, col := range csvHeader {
-	//	col = strings.ToLower(strings.TrimSpace(col))
-	//	if allowedCols[col] {
-	//		cols = append(cols, col)
-	//	}
-	//}
-	//
-	//if len(cols) == 0 {
-	//	log.Println("No valid columns found")
-	//	http.Error(w, "No valid columns found", http.StatusBadRequest)
-	//	return
-	//}
-	//
-	//// Build query dynamically
-	//placeholders := make([]string, len(cols))
-	//for i := range cols {
-	//	placeholders[i] = fmt.Sprintf("$%d", i+1)
-	//}
-	//
-	//query := fmt.Sprintf("INSERT INTO market_signal (%s, source_file_id) VALUES (%s, $%d)",
-	//	strings.Join(cols, ", "),
-	//	strings.Join(placeholders, ", "),
-	//	len(cols)+1,
-	//)
-	//// Read data rows
-	//for {
-	//	record, err := reader.Read()
-	//	if err == io.EOF {
-	//		break
-	//	}
-	//	if err != nil {
-	//		log.Println("Invalid CSV format: ", err)
-	//		http.Error(w, "Invalid CSV format", http.StatusBadRequest)
-	//		return
-	//	}
-	//
-	//	// Build values slice based on selected columns
-	//	values := make([]interface{}, len(cols))
-	//	for i, col := range cols {
-	//		idx := indexOf(csvHeader, col)
-	//		if idx >= 0 && idx < len(record) {
-	//			values[i] = record[idx]
-	//		} else {
-	//			values[i] = nil
-	//		}
-	//	}
-	//	values = append(values, sourceFileId)
-	//
-	//	_, err = db.Exec(query, values...)
-	//	if err != nil {
-	//		log.Println("Insert failed: ", err)
-	//		http.Error(w, "Insert failed", http.StatusBadRequest)
-	//		return
-	//	}
-	//}
+	// Prepare list of columns that exist in the DB
+	columnMapping := map[string]string{
+		"symbol":        "symbol",
+		"action":        "action",
+		"quantity":      "quantity",
+		"sectype":       "sectype",
+		"exchange":      "exchange",
+		"timeinforce":   "time_in_force",
+		"ordertype":     "order_type",
+		"lmtprice":      "lmt_price",
+		"orderid":       "order_id",
+		"baskettag":     "basket_tag",
+		"orderref":      "order_ref",
+		"account":       "account",
+		"auxprice":      "aux_price",
+		"parentorderid": "parent_order_id",
+	}
+
+	// Filter valid columns from header
+	var cols []string
+	for _, col := range csvHeader {
+		if mapped, ok := columnMapping[strings.ToLower(strings.TrimSpace(col))]; ok {
+			cols = append(cols, mapped)
+		} else {
+			log.Printf("Unknown CSV column: %s\n", col)
+			http.Error(w, "Unknown CSV column:", http.StatusBadRequest)
+			return
+		}
+	}
+
+	if len(cols) == 0 {
+		log.Println("No valid columns found")
+		http.Error(w, "No valid columns found", http.StatusBadRequest)
+		return
+	}
+
+	// Build query dynamically
+	placeholders := make([]string, len(cols))
+	for i := range cols {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+	}
+
+	query := fmt.Sprintf("INSERT INTO market_signal (%s, source_file_id) VALUES (%s, $%d)",
+		strings.Join(cols, ", "),
+		strings.Join(placeholders, ", "),
+		len(cols)+1,
+	)
+	// Read data rows
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Println("Invalid CSV format: ", err)
+			http.Error(w, "Invalid CSV format", http.StatusBadRequest)
+			return
+		}
+
+		// Build values slice based on selected columns
+		values := make([]interface{}, len(cols))
+		log.Println("cols: ", cols)
+		for i, _ := range cols {
+			//idx := indexOf(csvHeader, col)
+			//if idx >= 0 && idx < len(record) {
+			log.Println("cols[i]: ", cols[i])
+			log.Println("record[i]: ", record[i])
+			if record[i] != "" {
+				values[i] = record[i]
+			} else {
+				values[i] = nil
+			}
+		}
+		values = append(values, sourceFileId)
+
+		_, err = tx.Exec(query, values...)
+		if err != nil {
+			log.Println("Insert failed: ", err)
+			http.Error(w, "Insert failed", http.StatusBadRequest)
+			return
+		}
+	}
 
 	if err := tx.Commit(); err != nil {
 		log.Println("Transaction commit failed: ", err)

@@ -16,7 +16,8 @@ CREATE TABLE signal
 CREATE TABLE source_file
 (
     id                SERIAL PRIMARY KEY,
-    filename          TEXT NOT NULL,
+    name              TEXT NOT NULL,
+    path              TEXT NOT NULL,
     source_ip_address TEXT,
     uploaded_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -24,7 +25,7 @@ CREATE TABLE source_file
 CREATE TABLE market_signal
 (
     id              SERIAL PRIMARY KEY,
-    source_file_id       INTEGER REFERENCES source_file (id),
+    source_file_id  INTEGER REFERENCES source_file (id),
     symbol          TEXT             NOT NULL,
     action          TEXT             NOT NULL,
     quantity        DOUBLE PRECISION NOT NULL,

@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
+	//"strconv"
 	"strings"
 	"time"
 
@@ -160,6 +160,15 @@ func SaveUploadedFile(file io.Reader, originalFilename string) (string, error) {
 	return targetPath, nil
 }
 
+func indexOf(slice []string, target string) int {
+	for i, s := range slice {
+		if strings.ToLower(strings.TrimSpace(s)) == target {
+			return i
+		}
+	}
+	return -1
+}
+
 func postSignalFileHandler(w http.ResponseWriter, r *http.Request) {
 	//if r.Method != http.MethodPost {
 	//	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -197,66 +206,92 @@ func postSignalFileHandler(w http.ResponseWriter, r *http.Request) {
 	// Insert upload record
 	var sourceFileId int
 	err = tx.QueryRow(`
-        INSERT INTO source_file (filename, source_ip_address) 
-        VALUES ($1, $2) RETURNING id
-    `, header.Filename, ip).Scan(&sourceFileId)
+        INSERT INTO source_file (name, path, source_ip_address) 
+        VALUES ($1, $2, $3) RETURNING id
+    `, header.Filename, savedPath, ip).Scan(&sourceFileId)
 	if err != nil {
 		log.Println("Failed to insert upload info: ", err)
 		http.Error(w, "Failed to insert upload info", http.StatusInternalServerError)
 		return
 	}
+	log.Println("file: ", file)
 
 	reader := csv.NewReader(file)
 	reader.TrimLeadingSpace = true
+	log.Println("reader: ", reader)
 	_, err = reader.Read() // skip header
 	if err != nil {
-		log.Println("Invalid CSV format: ", err)
-		http.Error(w, "Invalid CSV format", http.StatusBadRequest)
+		log.Println("Failed to read header: ", err)
+		http.Error(w, "Failed to read header", http.StatusBadRequest)
 		return
 	}
 
-	stmt, err := tx.Prepare(`
-        INSERT INTO market_signal (
-            symbol, action, quantity, sectype, exchange,
-            time_in_force, order_type, lmt_price, order_id,
-            basket_tag, order_ref, account, aux_price, parent_order_id, source_file_id
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-    `)
-	if err != nil {
-		log.Println("Failed to prepare statement: ", err)
-		http.Error(w, "Failed to prepare statement", http.StatusInternalServerError)
-		return
-	}
-	defer stmt.Close()
-
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Println("CSV read error: ", err)
-			http.Error(w, "CSV read error", http.StatusBadRequest)
-			return
-		}
-
-		quantity, _ := strconv.ParseFloat(record[2], 64)
-		lmtPrice, _ := strconv.ParseFloat(record[7], 64)
-		orderID, _ := strconv.Atoi(record[8])
-		auxPrice, _ := strconv.ParseFloat(record[12], 64)
-		parentOrderID, _ := strconv.Atoi(record[13])
-
-		_, err = stmt.Exec(
-			record[0], record[1], quantity, record[3], record[4],
-			record[5], record[6], lmtPrice, orderID,
-			record[9], record[10], record[11], auxPrice, parentOrderID, sourceFileId,
-		)
-		if err != nil {
-			log.Println("DB insert failed: ", err)
-			http.Error(w, "DB insert failed: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
+	//// Prepare list of columns that exist in the DB
+	//allowedCols := map[string]bool{
+	//	"symbol": true, "action": true, "quantity": true,
+	//	"sectype": true, "exchange": true, "timeinforce": true,
+	//	"ordertype": true, "lmtprice": true, "orderid": true,
+	//	"baskettag": true, "orderref": true, "account": true,
+	//	"auxprice": true, "parentorderid": true,
+	//}
+	//
+	//// Filter valid columns from header
+	//var cols []string
+	//for _, col := range csvHeader {
+	//	col = strings.ToLower(strings.TrimSpace(col))
+	//	if allowedCols[col] {
+	//		cols = append(cols, col)
+	//	}
+	//}
+	//
+	//if len(cols) == 0 {
+	//	log.Println("No valid columns found")
+	//	http.Error(w, "No valid columns found", http.StatusBadRequest)
+	//	return
+	//}
+	//
+	//// Build query dynamically
+	//placeholders := make([]string, len(cols))
+	//for i := range cols {
+	//	placeholders[i] = fmt.Sprintf("$%d", i+1)
+	//}
+	//
+	//query := fmt.Sprintf("INSERT INTO market_signal (%s, source_file_id) VALUES (%s, $%d)",
+	//	strings.Join(cols, ", "),
+	//	strings.Join(placeholders, ", "),
+	//	len(cols)+1,
+	//)
+	//// Read data rows
+	//for {
+	//	record, err := reader.Read()
+	//	if err == io.EOF {
+	//		break
+	//	}
+	//	if err != nil {
+	//		log.Println("Invalid CSV format: ", err)
+	//		http.Error(w, "Invalid CSV format", http.StatusBadRequest)
+	//		return
+	//	}
+	//
+	//	// Build values slice based on selected columns
+	//	values := make([]interface{}, len(cols))
+	//	for i, col := range cols {
+	//		idx := indexOf(csvHeader, col)
+	//		if idx >= 0 && idx < len(record) {
+	//			values[i] = record[idx]
+	//		} else {
+	//			values[i] = nil
+	//		}
+	//	}
+	//	values = append(values, sourceFileId)
+	//
+	//	_, err = db.Exec(query, values...)
+	//	if err != nil {
+	//		log.Println("Insert failed: ", err)
+	//		http.Error(w, "Insert failed", http.StatusBadRequest)
+	//		return
+	//	}
+	//}
 
 	if err := tx.Commit(); err != nil {
 		log.Println("Transaction commit failed: ", err)
